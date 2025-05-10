@@ -31,6 +31,8 @@ TradeRouter.post(
         strategy_id,
         symbol_id,
         quantity,
+        entry_price,
+        exit_price,
         price,
         type,
         trade_date,
@@ -50,11 +52,12 @@ TradeRouter.post(
         !strategy_id ||
         !symbol_id ||
         !quantity ||
-        !price ||
         !type ||
         !entry_reason ||
         !exit_reason ||
-        !outcome
+        !outcome ||
+        !entry_price ||
+        !exit_price
       ) {
         return res.status(400).json({ error: "Missing required fields" });
       }
@@ -81,17 +84,20 @@ TradeRouter.post(
 
       // Create trade
       const tradeData = {
-        user_id,
-        journal_id,
-        portfolio_id,
-        strategy_id,
-        symbol_id,
-        quantity,
-        price,
-        type,
-        trade_date,
-        fees,
-        confidence_level,
+        user_id: Number(user_id),
+        journal_id: journal_id ? Number(journal_id) : null,
+        portfolio_id: portfolio_id ? Number(portfolio_id) : null,
+        strategy_id: Number(strategy_id),
+        symbol_id: Number(symbol_id),
+        quantity: parseFloat(quantity),
+        price: parseFloat(price),
+        entry_price: parseFloat(entry_price),
+        exit_price: parseFloat(exit_price),
+        type, // assuming it's either "buy" or "sell"
+        trade_date: trade_date && !isNaN(new Date(trade_date)) ? new Date(trade_date) : new Date(),
+
+        fees: fees ? parseFloat(fees) : 0,
+        confidence_level: confidence_level ? Number(confidence_level) : null,
         entry_reason,
         exit_reason,
         outcome,
@@ -310,6 +316,24 @@ TradeRouter.get("/", authMiddleware, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch trades" });
+  }
+});
+
+TradeRouter.delete("/:id", authMiddleware, async (req, res) => {
+  try {
+    const user_id = req.user.id;
+    const { id } = req.params;
+
+    const trade = await Trade.findOne({ where: { id, user_id } });
+    if (!trade) {
+      return res.status(404).json({ error: "Trade not found" });
+    }
+
+    await trade.destroy();
+    res.json({ message: "Trade deleted successfully" });
+  } catch (error) {
+    console.error("Delete trade error:", error);
+    res.status(500).json({ error: "Failed to delete trade" });
   }
 });
 

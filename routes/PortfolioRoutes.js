@@ -16,7 +16,7 @@ PortfolioRouter.post("/", authMiddleware, async (req, res) => {
     }
 
     const existing = await Portfolio.findOne({
-      where: { user_id: user.id, name: name.trim() },
+      where: { user_id: user.id, name: name },
     });
 
     if (existing) {
@@ -27,7 +27,7 @@ PortfolioRouter.post("/", authMiddleware, async (req, res) => {
 
     const portfolio = await Portfolio.create({
       user_id: user.id,
-      name: name.trim(),
+      name: name,
     });
     res.status(201).json(portfolio);
   } catch (err) {

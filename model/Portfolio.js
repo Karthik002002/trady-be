@@ -13,7 +13,7 @@ const Portfolio = sequelize.define(
     user_id: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      unique: true,
+      unique: false,
     },
     name: {
       type: DataTypes.STRING,

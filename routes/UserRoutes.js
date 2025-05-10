@@ -41,10 +41,11 @@ UserRouter.post("/register", authMiddleware, async (req, res) => {
 UserRouter.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
+
     if (!username || !password) {
       return res
         .status(400)
-        .json({ message: "Username and password is mandatory for login" });
+        .json({ message: "Username and password are mandatory for login" });
     }
 
     const user = await User.findOne({ where: { username } });
@@ -53,32 +54,63 @@ UserRouter.post("/login", async (req, res) => {
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
-
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid Username or password" });
     }
 
-    const existingToken = await Token.findOne({ where: { user_id: user.id } });
+    let existingToken = await Token.findOne({ where: { user_id: user.id } });
 
     if (existingToken) {
-      await Token.destroy({ where: { user_id: user.id } });
+      try {
+        // Check if token is still valid
+        jwt.verify(existingToken.token, process.env.JWT_TOKEN);
+        // If valid, return it
+        return res.status(200).json({
+          message: "Login successful",
+          token: existingToken.token,
+          user_role: user.user_role,
+        });
+      } catch (err) {
+        // If token is expired or invalid, delete it
+        await Token.destroy({ where: { user_id: user.id } });
+      }
     }
 
-    const token = jwt.sign({ id: user.id }, process.env.JWT_TOKEN, {
-      expiresIn: "1d",
+    // Create new token
+    const newToken = jwt.sign({ id: user.id }, process.env.JWT_TOKEN, {
+      expiresIn: "2d",
     });
 
     await Token.create({
       user_id: user.id,
-      token: token,
+      token: newToken,
     });
 
-    res
-      .status(200)
-      .json({ message: "Login successful", token, user_role: user.user_role });
+    res.status(200).json({
+      message: "Login successful",
+      token: newToken,
+      user_role: user.user_role,
+    });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+UserRouter.post("/logout", authMiddleware, async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1]; // Get the token
+    const user_id = req.user.id;
+
+    // Remove the token from the database
+    await Token.destroy({
+      where: { user_id, token },
+    });
+
+    res.status(200).json({ message: "Logged out successfully" });
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({ error: "Logout failed" });
   }
 });
 

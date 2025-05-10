@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    container_name: trady_be_app
+    ports:
+      - "5000:5000"
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: trady
+    depends_on:
+      - db
+    command: npm run dev
+
+  db:
+    image: mysql:8.0
+    container_name: trady_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: trady
+      MYSQL_USER: temp
+      MYSQL_PASSWORD: root
+    ports:
+      - "3308" # corrected the port mapping to expose standard MySQL port

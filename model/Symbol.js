@@ -14,6 +14,11 @@ const Symbol = sequelize.define(
       unique: true,
       allowNull: false,
     },
+    name: {
+      type: DataTypes.STRING,
+      unique: false,
+      allowNull: false,
+    },
     price: {
       type: DataTypes.FLOAT,
       allowNull: true, // or false if always required

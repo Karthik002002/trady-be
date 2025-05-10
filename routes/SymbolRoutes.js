@@ -7,7 +7,7 @@ const SymbolRouter = express.Router();
 // Create Symbol
 SymbolRouter.post("/", async (req, res) => {
   try {
-    const { symbol } = req.body;
+    const { symbol, name } = req.body;
     let quote;
     try {
       quote = await yahooFinance.quote(symbol + ".NS");
@@ -16,15 +16,16 @@ SymbolRouter.post("/", async (req, res) => {
     }
 
     if (!symbol) return res.status(400).json({ error: "Symbol is required" });
+    if (!name) return res.status(400).json({ error: "Name is required" });
 
     const exists = await Symbol.findOne({ where: { symbol } });
     if (exists) return res.status(409).json({ error: "Symbol already exists" });
 
-    console.log(quote);
+    // console.log(quote);
 
     const price = quote.regularMarketPrice || null;
 
-    const newSymbol = await Symbol.create({ symbol, price });
+    const newSymbol = await Symbol.create({ symbol, price, name });
 
     res.status(201).json(newSymbol);
   } catch (err) {
@@ -58,15 +59,34 @@ SymbolRouter.get("/:id", async (req, res) => {
 // Update Symbol
 SymbolRouter.put("/:id", async (req, res) => {
   try {
-    const { symbol } = req.body;
+    const { symbol, name } = req.body;
     const existing = await Symbol.findByPk(req.params.id);
-    if (!existing) return res.status(404).json({ error: "Symbol not found" });
 
-    existing.symbol = symbol || existing.symbol;
+    if (!existing) {
+      return res.status(404).json({ error: "Symbol not found" });
+    }
+
+    // If symbol is changing, validate and get new price
+    if (symbol && symbol !== existing.symbol) {
+      let quote;
+      try {
+        quote = await yahooFinance.quote(symbol + ".NS");
+      } catch (err) {
+        return res.status(400).json({ error: "Invalid stock symbol" });
+      }
+
+      const price = quote.regularMarketPrice || null;
+      existing.symbol = symbol;
+      existing.price = price;
+    }
+
+    if (name) existing.name = name;
+
     await existing.save();
 
     res.json({ message: "Symbol updated", symbol: existing });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });

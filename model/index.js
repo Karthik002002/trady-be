@@ -1,9 +1,11 @@
+import Goal from "./Goals.js";
 import Holdings from "./Holdings.js";
 import Journal from "./Journal.js";
 import Portfolio from "./Portfolio.js";
 import Strategy from "./Strategies.js";
 import Symbol from "./Symbol.js";
 import { Token } from "./TokenModel.js";
+import { TradeExecution } from "./TradeExecution.js";
 import Trade from "./Trades.js";
 import User from "./UserModel.js";
 import Watchlist from "./WatchList.js";
@@ -54,16 +56,28 @@ Holdings.belongsTo(Symbol, { foreignKey: "symbol_id" });
 Symbol.hasMany(Holdings, { foreignKey: "symbol_id" });
 
 // Watchlist
-
 Watchlist.belongsToMany(Symbol, {
   through: WatchlistSymbol,
   foreignKey: "watchlist_id",
 });
-
 Symbol.belongsToMany(Watchlist, {
   through: WatchlistSymbol,
   foreignKey: "symbol_id",
 });
+
+// TradeExecution
+TradeExecution.belongsTo(Symbol, { foreignKey: "symbol_id" });
+Symbol.hasMany(TradeExecution, { foreignKey: "symbol_id" });
+TradeExecution.belongsTo(User, { foreignKey: "user_id" });
+User.hasMany(TradeExecution, { foreignKey: "user_id" });
+TradeExecution.belongsTo(Strategy, { foreignKey: "strategy_id" });
+Strategy.hasMany(TradeExecution, { foreignKey: "strategy_id" });
+TradeExecution.belongsTo(Journal, { foreignKey: "journal_id" });
+Journal.hasMany(TradeExecution, { foreignKey: "journal_id" });
+
+// Goals
+Goal.belongsTo(Journal, { foreignKey: "journal_id" });
+Journal.hasMany(Goal, { foreignKey: "journal_id" });
 
 export {
   User,
@@ -76,4 +90,6 @@ export {
   Strategy,
   Journal,
   Trade,
+  Goal,
+  TradeExecution,
 };

@@ -20,7 +20,6 @@ const Trade = sequelize.define(
       allowNull: true,
       references: { model: "journals", key: "id" },
     },
-
     portfolio_id: {
       type: DataTypes.INTEGER,
       allowNull: true,
@@ -35,10 +34,6 @@ const Trade = sequelize.define(
       references: { model: "symbols", key: "id" },
     },
     quantity: {
-      type: DataTypes.FLOAT,
-      allowNull: false,
-    },
-    price: {
       type: DataTypes.FLOAT,
       allowNull: false,
     },
@@ -63,12 +58,13 @@ const Trade = sequelize.define(
         max: 10,
       },
     },
+
     entry_reason: {
       type: DataTypes.TEXT,
       allowNull: false,
     },
     photo: {
-      type: DataTypes.STRING, // Will store the file path or URL
+      type: DataTypes.STRING,
       allowNull: true,
     },
     notes: {
@@ -83,11 +79,39 @@ const Trade = sequelize.define(
       type: DataTypes.ENUM("win", "loss", "neutral"),
       allowNull: false,
     },
+    entry_price: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+    },
+    exit_price: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+    },
+    pl: {
+      type: DataTypes.FLOAT,
+      allowNull: true, // will be auto-calculated
+    },
   },
   {
     timestamps: true,
   }
 );
+
+Trade.beforeSave((trade, options) => {
+  const { entry_price, exit_price, quantity, type, fees = 0 } = trade;
+
+  if (entry_price != null && exit_price != null && quantity != null) {
+    let profit = 0;
+
+    if (type === "buy") {
+      profit = (exit_price - entry_price) * quantity;
+    } else if (type === "sell") {
+      profit = (entry_price - exit_price) * quantity;
+    }
+
+    trade.pl = profit - fees;
+  }
+});
 
 // Strategy.hasMany(Trade, { foreignKey: "strategy_id", as: "trades" });
 // Trade.belongsTo(Strategy, { foreignKey: "strategy_id", as: "strategy" });

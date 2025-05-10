@@ -5,7 +5,7 @@ import { Op } from "sequelize";
 
 const JournalRouter = e.Router();
 
-JournalRouter.post("/add", authMiddleware, async (req, res) => {
+JournalRouter.post("/", authMiddleware, async (req, res) => {
   try {
     const { title, type } = req.body;
     const user_id = req.user.id;
@@ -14,9 +14,21 @@ JournalRouter.post("/add", authMiddleware, async (req, res) => {
       return res.status(400).json({ error: "Title and type are required" });
     }
 
+    // Check if journal with same title and type exists for this user
+    const existingJournal = await Journal.findOne({
+      where: { user_id, title, type },
+    });
+
+    if (existingJournal) {
+      return res.status(400).json({
+        message: "A journal with the same title and type already exists.",
+      });
+    }
+
     const journal = await Journal.create({ title, type, user_id });
     res.status(201).json(journal);
   } catch (error) {
+    console.error("POST /journal error:", error);
     res.status(500).json({ error: "Failed to create journal" });
   }
 });
@@ -31,6 +43,20 @@ JournalRouter.patch("/:id", authMiddleware, async (req, res) => {
     const journal = await Journal.findOne({ where: { id, user_id } });
     if (!journal) return res.status(404).json({ error: "Journal not found" });
 
+    if (
+      (title !== undefined && title !== journal.title) ||
+      (type !== undefined && type !== journal.type)
+    ) {
+      const existingJournal = await Journal.findOne({
+        where: { user_id, title, type, id: { [Op.ne]: id } },
+      });
+
+      if (existingJournal) {
+        return res.status(400).json({
+          message: "A journal with the same title and type already exists.",
+        });
+      }
+    }
     // Check if a journal with the same title and type already exists for this user
     const existingJournal = await Journal.findOne({
       where: { user_id, title, type, id: { [Op.ne]: id } }, // Exclude the current journal by id
@@ -66,7 +92,7 @@ JournalRouter.delete("/:id", authMiddleware, async (req, res) => {
     if (!journal) return res.status(404).json({ error: "Journal not found" });
 
     journal.isDeleted = true;
-    await journal.save();
+    await journal.destroy();
 
     res.json({ message: "Journal soft-deleted successfully" });
   } catch (error) {
@@ -114,8 +140,7 @@ JournalRouter.get("/with-trades", authMiddleware, async (req, res) => {
         [Op.between]: [startDate, endDate],
       };
     }
-    console.log(where, today);
-
+    const BASE_URL = process.env.BASE_URL || "http://localhost:5001";
     const journals = await Journal.findAll({
       where,
       attributes: { exclude: ["user_id", "isDeleted", "createdAt"] },
@@ -131,23 +156,59 @@ JournalRouter.get("/with-trades", authMiddleware, async (req, res) => {
         },
       ],
     });
+    journals.forEach((journal) => {
+      journal.trades?.forEach((trade) => {
+        if (trade.photo) {
+          trade.photo = `${BASE_URL}/${trade.photo}`;
+        }
+      });
+    });
     const enrichedJournals = journals.map((journal) => {
       const trades = journal.trades || [];
 
-      const totalPL = trades.reduce((sum, t) => sum + (t.pl || 0), 0);
-      const winCount = trades.filter((t) => t.pl > 0).length;
-      const winRate = trades.length > 0 ? (winCount / trades.length) * 100 : 0;
-      const avgReturn =
-        trades.length > 0
-          ? trades.reduce((sum, t) => sum + (t.return_percent || 0), 0) /
-            trades.length
-          : 0;
+      let totalPL = 0;
+      let winCount = 0;
+      let totalReturn = 0;
+      let tradeCount = trades.length;
+
+      let winTrades = 0;
+      let lossTrades = 0;
+      let neutralTrades = 0;
+
+      for (const trade of trades) {
+        const pl = trade.pl || 0;
+        const ret = trade.pl || 0;
+
+        totalPL += pl;
+        totalReturn += ret;
+
+        if (pl > 0) winCount++;
+
+        switch (trade.outcome) {
+          case "win":
+            winTrades++;
+            break;
+          case "loss":
+            lossTrades++;
+            break;
+          case "neutral":
+            neutralTrades++;
+            break;
+        }
+      }
+
+      const winRate = tradeCount > 0 ? (winCount / tradeCount) * 100 : 0;
+      const avgReturn = tradeCount > 0 ? totalReturn / tradeCount : 0;
 
       return {
         ...journal.toJSON(),
         total_pl: totalPL,
         win_rate: parseFloat(winRate.toFixed(2)),
         avg_return: parseFloat(avgReturn.toFixed(2)),
+        // Optional: return individual counts if needed
+        win_trades: winTrades,
+        loss_trades: lossTrades,
+        neutral_trades: neutralTrades,
       };
     });
 
@@ -161,25 +222,36 @@ JournalRouter.get("/with-trades", authMiddleware, async (req, res) => {
 JournalRouter.get("/:id?", authMiddleware, async (req, res) => {
   try {
     const user_id = req.user.id;
-    const { id, type } = req.params;
+    const { id } = req.params;
+    const journalType = req.query.type;
+
+    const where = {
+      user_id,
+      isDeleted: false,
+    };
 
     if (id) {
       const journal = await Journal.findOne({
-        where: { id, user_id, isDeleted: false },
+        where: { id, ...where },
         attributes: { exclude: ["isDeleted", "user_id", "createdAt"] },
       });
       if (!journal) return res.status(404).json({ error: "Journal not found" });
       return res.json(journal);
     }
 
+    if (journalType) {
+      where.type = journalType;
+    }
+
     const journals = await Journal.findAll({
-      where: { user_id, isDeleted: false },
+      where,
       attributes: { exclude: ["isDeleted", "user_id", "createdAt"] },
       order: [["updatedAt", "DESC"]],
     });
 
     res.json(journals);
   } catch (error) {
+    console.error("Journal fetch error:", error);
     res.status(500).json({ error: "Failed to fetch journals" });
   }
 });

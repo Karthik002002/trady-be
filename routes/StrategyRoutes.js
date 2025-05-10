@@ -1,15 +1,11 @@
 import express from "express";
-import User from "../model/UserModel.js";
 import { authMiddleware } from "../middleware/Autheticatetoken.js";
-import { Token } from "../model/TokenModel.js";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import Strategy from "../model/Strategies.js";
 import { Op } from "sequelize";
 
 const StrategyRouter = express.Router();
 
-StrategyRouter.post("/add", authMiddleware, async (req, res) => {
+StrategyRouter.post("/", authMiddleware, async (req, res) => {
   try {
     const { name, description } = req.body;
 
@@ -54,7 +50,7 @@ StrategyRouter.post("/add", authMiddleware, async (req, res) => {
   }
 });
 
-StrategyRouter.get("/list", authMiddleware, async (req, res) => {
+StrategyRouter.get("/", authMiddleware, async (req, res) => {
   try {
     const user = req.user;
 
@@ -62,13 +58,15 @@ StrategyRouter.get("/list", authMiddleware, async (req, res) => {
       return res.status(401).json({ error: "Unauthorized user." });
     }
 
+    const where = {
+      [Op.or]: [
+        { user_id: user.id }, // User's personal strategies
+        { user_id: null }, // Global strategies
+      ],
+    };
+
     const strategies = await Strategy.findAll({
-      where: {
-        [Op.or]: [
-          { user_id: user.id }, // User's personal strategies
-          { user_id: null }, // Global strategies
-        ],
-      },
+      where,
       attributes: { exclude: ["user_id"] },
       order: [["createdAt", "DESC"]],
     });
@@ -76,6 +74,39 @@ StrategyRouter.get("/list", authMiddleware, async (req, res) => {
     res.status(200).json(strategies);
   } catch (error) {
     console.error("Error fetching strategies:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
+StrategyRouter.get("/:id", authMiddleware, async (req, res) => {
+  try {
+    const user = req.user;
+    const { id } = req.params;
+
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized user." });
+    }
+
+    const where = {
+      [Op.and]: [
+        { id },
+        {
+          [Op.or]: [{ user_id: user.id }, { user_id: null }],
+        },
+      ],
+    };
+
+    const strategy = await Strategy.findOne({
+      where,
+      attributes: { exclude: ["user_id"] },
+    });
+
+    if (!strategy) {
+      return res.status(404).json({ error: "Strategy not found." });
+    }
+
+    res.status(200).json(strategy);
+  } catch (error) {
+    console.error("Error fetching strategy:", error);
     res.status(500).json({ error: "Internal server error." });
   }
 });
